@@ -1,0 +1,21 @@
+[project]
+name = "call-me-maybe"
+version = "0.1.0"
+description = "Function calling "
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "llm-sdk",
+    "numpy>=2.5.1",
+    "pydantic>=2.13.4",
+]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0",
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+]
+
+[tool.uv.sources]
+llm-sdk = { path = "llm_sdk.zip" }
