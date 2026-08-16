@@ -1,46 +1,44 @@
-import argparse
-import json
+from src.arguement_parser import parse_arguements
+from src.json_loader import load_json_file
+from src.models import FunctionDef, PromptEntry
 import sys
+from pydantic import ValidationError
+from typing import Any
 
-
-def parse_arguements() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="call_me_maybe",
-        description="LLM function calling tool that that translates "
-                     "natural language prompts into structured function calls",
-        )
-
-    parser.add_argument(
-        "--functions_definition",
-        help = "Declare path to JSON file containing function definitions",
-        default= "data/input/functions_definition.json",
-        )
-    parser.add_argument(
-        "--input",
-        help="Declare path to input file containing the prompts",
-        default="data/input/function_calling_tests.json",
-        )
-    parser.add_argument(
-        "--output",
-        help="Declare path to JSON output file",
-        default="data/output/function_calls.json"
-        )
-
-    args = parser.parse_args()
-    return args
 
 def main() -> None:
 
-    paths = parse_arguements()
+    args = parse_arguements()
+    #Load JSON function definitions and input prompts
+    functions_definitions: list[Any] = load_json_file(args.functions_definition)
+    input_prompts: list[dict[str]] = load_json_file(args.input)
 
-    data: dict ={}
-    try:
-        with open(paths.functions_definition, "r") as file:
-            data = json.load(file)
-            print(data)
-    except (FileNotFoundError, json.JSONDecodeError) as err:
-        print(err)
-        sys.exit(1)
+
+    validated_models: list = []
+    validated_prompts: list = []
+    for functions_definition in functions_definitions:
+        try:
+            validated_models.append(FunctionDef.model_validate(functions_definition))
+        except ValidationError as err:
+            print(err)
+    
+    for input_prompt in input_prompts:
+        try:
+            validated_prompts.append(PromptEntry.model_validate(input_prompt))
+        except ValidationError as err:
+            print(err)
+
+    if not validated_models:
+        print("No vallid function definition found")
+        sys.exit()
+
+
+
+        
+    
+
+
+    
 
 if __name__ == "__main__":
     main()
