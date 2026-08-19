@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from typing import Any
 from src.json_parser import JsonParser
 from llm_sdk import Small_LLM_Model
+from src.vocab import load_or_build_vocab
 
 def main() -> None:
 
@@ -20,7 +21,9 @@ def main() -> None:
     except ValueError as err:
         print(err)
         sys.exit()
-    print(parsed.validated_prompts)
+    
+    model = Small_LLM_Model()
+    vocab: dict = load_or_build_vocab(model)
     
     
 
