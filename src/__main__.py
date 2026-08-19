@@ -16,6 +16,7 @@ def main() -> None:
     #parse and validate json functions and prompts
     try:
         parsed = JsonParser(functions_definitions, input_prompts)
+        print(f"Error log: {parsed.error_log}")
     except ValueError as err:
         print(err)
         sys.exit()
