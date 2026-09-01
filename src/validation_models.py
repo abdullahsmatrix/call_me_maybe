@@ -20,6 +20,6 @@ class FunctionCallResults(BaseModel):
     """Pydantic model representing function call result"""
     prompt: str
     name: str
-    parameters: dict[str, ParameterType]
+    parameters: dict[str, float | str]
 
 

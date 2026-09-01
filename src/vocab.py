@@ -1,11 +1,11 @@
 from pathlib import Path
 import json
 
-
 BPE_DECODE_TABLE = {
-    "Ġ": " ",
-    "Ċ": "\n",
+    'Ġ': ' ',
+    'Ċ': '\n'
 }
+
 
 def load_or_build_vocab(model) -> dict:
 
@@ -30,13 +30,20 @@ def build_vocab(model) -> dict:
 
     inverse_vocab = {}
     for k, v in vocab.items():
-        if 'Ġ' in k:
-            k = k.replace('Ġ', ' ')
-            inverse_vocab[v] = k
-        elif 'Ċ' in k:
-            k = k.replace('Ċ', '\n')
-            inverse_vocab[v] = k
-
-
-
+        for bpe_char, real_char in BPE_DECODE_TABLE.items():
+            k = k.replace(bpe_char, real_char)
+        inverse_vocab[v] = k
+        
+    
+    first_char_index: dict[str, list] = {}
+    for token_id, token_string in inverse_vocab.items():
+        first_char = token_string[0] if token_string else ""
+        if first_char not in first_char_index:
+            first_char_index[first_char] = []
+        first_char_index[first_char].append(token_id)
+    
+    return {
+        "id_to_token": inverse_vocab,
+        "first_char_index": first_char_index
+    }
 
