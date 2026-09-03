@@ -1,5 +1,7 @@
 from src.validation_models import ParameterType, PromptEntry, FunctionDef, FunctionCallResults
 from pydantic import ValidationError
+from typing import Any
+
 class JsonParser():
     def __init__(self, functions_definitions: list[Any], input_prompts: list[dict[str]]) -> None:
         self.functions_definitions = functions_definitions
