@@ -50,4 +50,13 @@ class TrieMatcher():
             result.extend(self.vocab['first_char_index'][key])
 
         return result
+    
+    def is_complete(self, current_prefix: str) -> bool:
+        """checker function to see if the prefix is complete candidate"""
+        current_node = self.trie_dict
+        for char in current_prefix:
+            if char not in current_node:
+                return False
+            current_node = current_node[char]
+        return current_node.get("is_end", False)
             
