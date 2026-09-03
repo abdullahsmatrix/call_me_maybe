@@ -20,3 +20,14 @@ class TrieMatcher():
                     current_node[char] = {}
                 current_node = current_node[char]
             current_node["is_end"] = True
+    
+    def get_valid_token_ids(self, current_prefix: str) -> list[int]:
+        result: list = []
+        for char in current_prefix:
+            if char not in self.trie_dict:
+                return []
+            elif char is "is_end":
+                continue
+            result.append(self.vocab['first_char_index'][char])
+            current_node = self.trie_dict[char]
+            
