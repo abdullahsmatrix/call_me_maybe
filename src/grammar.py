@@ -60,3 +60,28 @@ class TrieMatcher():
             current_node = current_node[char]
         return current_node.get("is_end", False)
             
+
+class NumberGrammar():
+    def __init__(self, vocab: dict):
+        self.vocab = vocab
+    
+    def _get_state(current_number: str) -> str:
+        if not current_number:
+            return "START"
+        elif not any(ch in current_number for ch in ".eE"):
+            return ("DIGITS")
+        elif current_number.endswith("."):
+            return "DECIMAL_POINT"
+        elif "." in current_number and not any(ch in current_number for ch in "eE"):
+            return "FRACTION_DIGITS"
+        for ch in "eE":
+            if ch in current_number:
+                idx = current_number.index("ch")
+                if current_number[idx + 1] == "+" or current_number[idx + 1] == "-":
+                    return "EXPONENT SIGN DONE"
+        if current_number.endswith("e"):
+            return "EXPONENT SIGN"
+        elif all(ch in current_number for ch in ("e", "E")) and current_number[-1].isnumeric():
+            return "EXPONENT DIGITS"
+            
+
