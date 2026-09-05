@@ -171,7 +171,7 @@ class StringGrammar():
                     if len(hex_part) == 0:
                         return "ESCAPE_U"
                     else:
-                        return "ESCAPE_DIGITS"
+                        return "ESCAPE_U_DIGITS"
         
         #count trailing backslashes
         trailing_backslashes: int = 0
@@ -216,4 +216,4 @@ class StringGrammar():
     
     def is_complete(self, current_string: str) -> bool:
         """Check whether the string has a closing quote and is complete."""
-        return self._get_state(current_string) == "COMPLETE"  
+        return self._get_state(current_string) == "COMPLETE"
