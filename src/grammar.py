@@ -138,3 +138,82 @@ class NumberGrammar():
         elif any(current_number.endswith(ch) for ch in (".", "e", "E", "e+", "E+", "e-", "E-")):
             is_valid = False
         return is_valid
+
+
+class StringGrammar():
+    """This class validates partial string that is being generated.
+    The grammar tracks whether generation is starting, inside a string, or
+    completing an escape sequence, then limits the next token accordingly.
+    """
+
+    def __init__(self, vocab: dict):
+        self.vocab = vocab
+    
+    def _get_state(self, current_string: str) -> str:
+        """Return the grammar state for a partial JSON string.
+        current_string is the string prefix generated so far.
+        returns current state, such as ``START``, ``IN_STRING``,
+            ``ESCAPE_CHAR``, or ``COMPLETE``.
+        """
+        if not current_string:
+            return "START"
+        if not current_string.startswith('"'):
+            return "UNKNOWN"
+        if current_string.endswith('"') and len(current_string) > 1:
+            return "COMPLETE"
+        
+        #look for incomplete \uXXX pattern
+        if '\\u' in current_string:
+            last_u_idx: int = current_string.rfind('\\u')
+            if last_u_idx != -1:
+                hex_part: str = current_string[last_u_idx + 2:]
+                if len(hex_part) < 4 and all(c in '0123456789abcdefABCDEF' for c in hex_part):
+                    if len(hex_part) == 0:
+                        return "ESCAPE_U"
+                    else:
+                        return "ESCAPE_DIGITS"
+        
+        #count trailing backslashes
+        trailing_backslashes: int = 0
+        for i in range(len(current_string) - 1, 0, -1):
+            if current_string[i] == '\\':
+                trailing_backslashes += 1
+            else:
+                break
+        
+        if trailing_backslashes % 2 == 1:
+            #odd! last backslash is unescaped
+            return "ESCAPE_CHAR"
+        else:
+            #Even! all backslashes are escaped
+            return "IN_STRING"
+    
+
+    def get_valid_token_ids(self, current_string: str) -> list:
+        """Returns A list of valid token ids that may be generated next in the current string state.
+        Returns an empty list when the current state has no valid continuation.
+        """
+        result: list = []
+        
+        state_char_validity: dict = {
+            "START": ['"'],
+            "IN_STRING": ['"', '\\'] + [chr(i) for i in range(32, 127) if chr(i) not in '"\\'],
+            "ESCAPE_CHAR": ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'],
+            "ESCAPE_U": list('0123456789abcdefABCDEF'),
+            "ESCAPE_U_DIGITS": list('0123456789abcdefABCDEF')
+        }
+
+        state: str = self._get_state(current_string)
+        if not state in state_char_validity or state == "COPMPLETE":
+            return []
+        
+        valid_chars: list = state_char_validity[state]
+        for ch in valid_chars:
+            token_ids = self.vocab['first_char_index'].get(ch, [])
+            result.extend(token_ids)
+        
+        return result
+    
+    def is_complete(self, current_string: str) -> bool:
+        """Check whether the string has a closing quote and is complete."""
+        return self._get_state(current_string) == "COMPLETE"  
