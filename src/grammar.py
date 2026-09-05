@@ -62,10 +62,24 @@ class TrieMatcher():
             
 
 class NumberGrammar():
+    """Validate and constrain partial numeric literals while they are generated.
+
+    This grammar tracks the current lexical state of a number and decides which
+    next characters are allowed for integer, decimal, and exponent forms.
+    It is used to mask invalid tokens so the model only emits syntactically valid
+    numeric values.
+    """
+
     def __init__(self, vocab: dict):
-        self.vocab = vocab
-    
+        """
+        Vocab is  Mapping from token characters to token ids, used to resolve valid next
+        tokens for each allowed character.
+        """
+        self.vocab = vocab 
+
     def _get_state(self, current_number: str) -> str:
+        # In this method we return the current grammar state for a partial numeric string.
+
         if not current_number:
             return "START"
         elif not any(ch in current_number for ch in ".eE"):
@@ -84,11 +98,13 @@ class NumberGrammar():
             return "EXPONENT_SIGN"
         elif any(ch in current_number for ch in ("e", "E")) and current_number[-1].isnumeric():
             return "EXPONENT_DIGITS"
-        
-        return "UNKNOWN"
-            
-    def get_valid_token_ids(self, current_number: str) -> list:
 
+        return "UNKNOWN"
+
+    def get_valid_token_ids(self, current_number: str) -> list:
+        """
+        In this method we return all token ids for characters valid in the current number state.
+        """
         result: list = []
         state_char_validity: dict = {
             "START": ["-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
@@ -110,6 +126,12 @@ class NumberGrammar():
         return result
 
     def is_complete(self, current_number: str) -> bool:
+        """Check whether the provided number string is complete and valid.
+
+        A number is considered complete when it is not empty, is not just a sign,
+        and does not end with a character that would require another numeric
+        digit or exponent component.
+        """
         is_valid: bool = True
         if not current_number or current_number == "+" or current_number == "-":
             is_valid = False
