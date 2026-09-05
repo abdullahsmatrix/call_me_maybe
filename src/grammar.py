@@ -69,7 +69,7 @@ class NumberGrammar():
         if not current_number:
             return "START"
         elif not any(ch in current_number for ch in ".eE"):
-            return ("DIGITS")
+            return "DIGITS"
         elif current_number.endswith("."):
             return "DECIMAL_POINT"
         elif "." in current_number and not any(ch in current_number for ch in "eE"):
@@ -85,6 +85,6 @@ class NumberGrammar():
         elif any(ch in current_number for ch in ("e", "E")) and current_number[-1].isnumeric():
             return "EXPONENT_DIGITS"
         
-        return None
+        return "UNKNOWN"
             
 
