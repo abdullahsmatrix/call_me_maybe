@@ -65,7 +65,7 @@ class NumberGrammar():
     def __init__(self, vocab: dict):
         self.vocab = vocab
     
-    def _get_state(current_number: str) -> str:
+    def _get_state(self, current_number: str) -> str:
         if not current_number:
             return "START"
         elif not any(ch in current_number for ch in ".eE"):
@@ -76,12 +76,15 @@ class NumberGrammar():
             return "FRACTION_DIGITS"
         for ch in "eE":
             if ch in current_number:
-                idx = current_number.index("ch")
-                if current_number[idx + 1] == "+" or current_number[idx + 1] == "-":
-                    return "EXPONENT SIGN DONE"
-        if current_number.endswith("e"):
-            return "EXPONENT SIGN"
-        elif all(ch in current_number for ch in ("e", "E")) and current_number[-1].isnumeric():
-            return "EXPONENT DIGITS"
+                idx = current_number.index(ch)
+                nxt_chr = current_number[idx + 1] if idx+1 < len(current_number) else None
+                if nxt_chr == "+" or nxt_chr == "-":
+                    return "EXPONENT_SIGN_DONE"
+        if current_number.endswith("e") or current_number.endswith("E"):
+            return "EXPONENT_SIGN"
+        elif any(ch in current_number for ch in ("e", "E")) and current_number[-1].isnumeric():
+            return "EXPONENT_DIGITS"
+        
+        return None
             
 
