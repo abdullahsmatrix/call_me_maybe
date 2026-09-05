@@ -87,7 +87,7 @@ class NumberGrammar():
         
         return "UNKNOWN"
             
-    def get_valid_token_ids(self, current_number) -> list:
+    def get_valid_token_ids(self, current_number: str) -> list:
 
         result: list = []
         state_char_validity: dict = {
@@ -100,9 +100,13 @@ class NumberGrammar():
             "EXPONENT_DIGITS": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
         }
 
-        valid_chars: list = state_char_validity[self._get_state(current_number)]
+        state: str = sel._get_state(current_number)
+        if state not in state_char_validity:
+            return []
+        valid_chars: list = state_char_validity[state]
         for ch in valid_chars:
-            result.append(self.vocab['first_char_index'][ch])
+            token_ids = self.vocab['first_char_index'].get(ch, [])
+            result.extend(token_ids)
         return result
 
 
