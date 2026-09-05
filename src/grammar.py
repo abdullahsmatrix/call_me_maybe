@@ -87,4 +87,22 @@ class NumberGrammar():
         
         return "UNKNOWN"
             
+    def get_valid_token_ids(self, current_number) -> list:
+
+        result: list = []
+        state_char_validity: dict = {
+            "START": ["-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "DIGITS": [".", "e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "DECIMAL_POINT": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "FRACTION_DIGITS": ["e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "EXPONENT_SIGN": ["+", "-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "EXPONENT_SIGN_DONE": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "EXPONENT_DIGITS": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        }
+
+        valid_chars: list = state_char_validity[self._get_state(current_number)]
+        for ch in valid_chars:
+            result.append(self.vocab['first_char_index'][ch])
+        return result
+
 
