@@ -100,7 +100,7 @@ class NumberGrammar():
             "EXPONENT_DIGITS": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
         }
 
-        state: str = sel._get_state(current_number)
+        state: str = self._get_state(current_number)
         if state not in state_char_validity:
             return []
         valid_chars: list = state_char_validity[state]
@@ -109,4 +109,10 @@ class NumberGrammar():
             result.extend(token_ids)
         return result
 
-
+    def is_complete(self, current_number: str) -> bool:
+        is_valid: bool = True
+        if not current_number or current_number == "+" or current_number == "-":
+            is_valid = False
+        elif any(current_number.endswith(ch) for ch in (".", "e", "E", "e+", "E+", "e-", "E-")):
+            is_valid = False
+        return is_valid
