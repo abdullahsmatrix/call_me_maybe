@@ -45,7 +45,26 @@ def _generate_parameters(
     encoded_prompt_ids: list[int]
 ) -> dict[str, float | str]:
     """For parameters in function_def, generate a value using approproiate Grammar"""
-    pass
+    for param_name, param_type in function_def.parameters.items():
+        if param_type == 'number':
+            grammar = NumberGrammar
+        else:
+            grammar = StringGrammar
+        #generate value with constraints
+        value_text, _ = generate_constrained(
+            model,
+            encoded_prompt_ids,
+            grammar,
+            vocab
+        )
+        #parse based on type
+        if param_type.type == 'number':
+            #convert string to float
+            parameters[param_name] = float(value_text)
+        else:
+            #remove surrounding quotes: "\"hello\"" -> "hello"
+            parameters[param_name] = value_text.strip("")
+    return parameters
 
 
 def _find_function_def(
