@@ -33,9 +33,10 @@ def generate_constrained(
     """
     accumulated_text: str = ""
     generated_token_ids: list = []
-    logits = model.get_logits_from_input_ids(input_ids)
+    
     for i in range(max_iterations):
         valid_tokens: list = grammar.get_valid_token_ids(accumulated_text)
+        logits = model.get_logits_from_input_ids(input_ids)
         masked_logits = mask_logits(logits, valid_tokens)
         next_token_id = np.argmax(masked_logits)
 
