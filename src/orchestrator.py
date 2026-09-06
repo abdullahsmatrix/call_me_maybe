@@ -16,7 +16,24 @@ def call_function(
     vocab: dict,
     encoded_prompt_ids: list[int]
 ) -> FunctionCallResults:
-    pass
+    
+    function_name = _generate_function_name(
+        available_functions,
+        model,
+        vocab,
+        encoded_prompt_ids
+    )
+
+    function_def = _find_function_def(function_name, available_functions)
+    parameters = _generate_parameters(
+        function_def,
+        model,
+        vocab,
+        encoded_prompt_ids
+    )
+
+    result = _build_result(prompt, function_name, parameters)
+    return result
 
 
 def _generate_function_name(
