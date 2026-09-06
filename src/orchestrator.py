@@ -50,7 +50,7 @@ def _generate_parameters(
         if param_type.type == 'number':
             grammar = NumberGrammar(vocab)
         else:
-            grammar = StringGrammar
+            grammar = StringGrammar(vocab)
         #generate value with constraints
         value_text, _ = generate_constrained(
             model,
