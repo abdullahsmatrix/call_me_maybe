@@ -1,3 +1,11 @@
+"""This module is the decoding engine. we implement token by token generation loop
+that enforce grammar constraints in real-time. Why? because the model is too small
+to be trusted and my hallucinate and generate ivalid outputs.
+We get logits -> Ask grammar what tokens are allowed -> mask all invalid yo -inf.
+The model is forced to pick valid options only.
+"""
+
+
 from typing import Union, Tuple
 import numpy as np
 from src.grammar import TrieMatcher, NumberGrammar, StringGrammar
