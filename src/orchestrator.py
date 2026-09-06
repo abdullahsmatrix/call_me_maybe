@@ -28,7 +28,15 @@ def _generate_function_name(
     """Use TrieMatcher grammar to generate valid function name.
     returns function name.
     """
-    pass
+    function_names: list = [func.name for func in available_functions]
+    grammar = TrieMatcher(function_names, vocab)
+    function_name_text, _ = generate_constrained(
+        model,
+        encoded_prompt_ids,
+        grammar,
+        vocab
+    )
+    return function_name_text
 
 def _generate_parameters(
     function_def: FunctionDef,
