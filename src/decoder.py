@@ -1,9 +1,9 @@
-from typing import Union
+from typing import Union, Tuple
 import numpy as np
 from src.grammar import TrieMatcher, NumberGrammar, StringGrammar
 from llm_sdk import Small_LLM_Model
 
-def mask_logits(logits: np.ndarray, valid_token_ids: list[str]) -> np.ndarray:
+def mask_logits(logits: np.ndarray, valid_token_ids: list[int]) -> np.ndarray:
     """Mask invalid token logits to -inf, allowing only valid tokens"""
     masked = logits.copy()
     valid_set = set(valid_token_ids)
@@ -25,7 +25,7 @@ def generate_constrained(
     """
     accumulated_text: str = ""
     generated_token_ids: list = []
-    
+    logits = model.get_logits_from_input_ids(input_ids)
     for i in range(max_iterations):
         valid_tokens: list = grammar.get_valid_token_ids(accumulated_text)
         masked_logits = mask_logits(logits, valid_tokens)
