@@ -36,7 +36,7 @@ def _generate_parameters(
     vocab: dict,
     encoded_prompt_ids: list[int]
 ) -> dict[str, float | str]:
-    """For parameters in function_def, generate a value using approproiate Grmmar"""
+    """For parameters in function_def, generate a value using approproiate Grammar"""
     pass
 
 
@@ -44,13 +44,18 @@ def _find_function_def(
     function_name: str,
     available_functions: list[FunctionDef]
 ) -> FunctionDef:
-    ...
-
+    for fun in available_functions:
+        if fun.name == function_name:
+            return fun
+    raise ValueError(f"Function: {function_name} not found")
 
 def _build_result(
     prompt: str,
     function_name: str,
     parameters: dict
 ) -> FunctionCallResults:
-    ...
-
+    return FunctionCallResults(
+        prompt= prompt,
+        name = function_name,
+        parameters = parameters
+    )
