@@ -13,6 +13,8 @@ from llm_sdk import Small_LLM_Model
 
 def main() -> None:
 
+    results: list = []
+
     args = parse_arguements()
     #Load JSON function definitions and input prompts
     functions_definitions: list[Any] = load_json_file(args.functions_definition)
@@ -28,14 +30,23 @@ def main() -> None:
     
     model = Small_LLM_Model()
     vocab: dict = load_or_build_vocab(model)
+
+    for prompt_entry in parsed.validated_prompts:
+        prompt_text = prompt_entry.prompt
+        encoded_ids = model.encode(prompt_text)
+
+        result = call_function(
+            prompt=prompt_text,
+            available_functions=parsed.validated_functions,
+            model=model,
+            vocab=vocab,
+            encoded_prompt_ids=encoded_ids
+        )
+
+        results.append(result)
+    write_results_to_json(results, args.output)
     
-    
-
-
-        
-    
-
-
+    print(f"Processing complete! {len(results)} function calls generated.")
     
 
 if __name__ == "__main__":
