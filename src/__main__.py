@@ -23,7 +23,8 @@ def main() -> None:
     #parse and validate json functions and prompts
     try:
         parsed = JsonParser(functions_definitions, input_prompts)
-        print(f"Error log: {parsed.error_log}")
+        if parsed.error_log is not None:
+            print(f"Error log: {parsed.error_log}")
     except ValueError as err:
         print(err)
         sys.exit()
@@ -33,14 +34,12 @@ def main() -> None:
 
     for prompt_entry in parsed.validated_prompts:
         prompt_text = prompt_entry.prompt
-        encoded_ids = model.encode(prompt_text)
 
         result = call_function(
             prompt=prompt_text,
             available_functions=parsed.validated_functions,
             model=model,
-            vocab=vocab,
-            encoded_prompt_ids=encoded_ids
+            vocab=vocab
         )
 
         results.append(result)

@@ -33,10 +33,21 @@ class TrieMatcher():
                 current_node = current_node[char]
             current_node["is_end"] = True
     
+    def _walk(self, node: dict, text: str) -> dict | None:
+        """Walk every character of text from node, or None if it falls off the trie."""
+        for char in text:
+            if char not in node:
+                return None
+            node = node[char]
+        return node
+
     def get_valid_token_ids(self, current_prefix: str) -> list[int]:
         """In this function we get a list of valid token Ids. Lets say we are
         in "fn_". our functions are "fn_add_numbers" and "fn_greet". The func
         returns tokend IDs for "a" and "g" as a list.
+
+        Tokens are multi-character (BPE), so a whole candidate token must be
+        walked through the trie, not just its first character.
         """
         result: list = []
         current_node = self.trie_dict
@@ -47,7 +58,10 @@ class TrieMatcher():
         for key in current_node.keys():
             if key == "is_end":
                 continue
-            result.extend(self.vocab['first_char_index'][key])
+            for token_id in self.vocab['first_char_index'].get(key, []):
+                token_string = self.vocab['id_to_token'][str(token_id)]
+                if self._walk(current_node, token_string) is not None:
+                    result.append(token_id)
 
         return result
     
@@ -75,7 +89,16 @@ class NumberGrammar():
         Vocab is  Mapping from token characters to token ids, used to resolve valid next
         tokens for each allowed character.
         """
-        self.vocab = vocab 
+        self.vocab = vocab
+        self.STATE_CHAR_VALIDITY: dict = {
+            "START": ["-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "DIGITS": [".", "e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "DECIMAL_POINT": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "FRACTION_DIGITS": ["e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "EXPONENT_SIGN": ["+", "-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "EXPONENT_SIGN_DONE": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            "EXPONENT_DIGITS": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        }
 
     def _get_state(self, current_number: str) -> str:
         # In this method we return the current grammar state for a partial numeric string.
@@ -101,28 +124,30 @@ class NumberGrammar():
 
         return "UNKNOWN"
 
+    def _is_valid_continuation(self, current_number: str, token_string: str) -> bool:
+        """Check every character of a multi-character token keeps the number valid."""
+        text = current_number
+        for ch in token_string:
+            state = self._get_state(text)
+            if state not in self.STATE_CHAR_VALIDITY or ch not in self.STATE_CHAR_VALIDITY[state]:
+                return False
+            text += ch
+        return True
+
     def get_valid_token_ids(self, current_number: str) -> list:
         """
         In this method we return all token ids for characters valid in the current number state.
         """
         result: list = []
-        state_char_validity: dict = {
-            "START": ["-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "DIGITS": [".", "e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "DECIMAL_POINT": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "FRACTION_DIGITS": ["e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "EXPONENT_SIGN": ["+", "-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "EXPONENT_SIGN_DONE": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "EXPONENT_DIGITS": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
-        }
-
         state: str = self._get_state(current_number)
-        if state not in state_char_validity:
+        if state not in self.STATE_CHAR_VALIDITY:
             return []
-        valid_chars: list = state_char_validity[state]
+        valid_chars: list = self.STATE_CHAR_VALIDITY[state]
         for ch in valid_chars:
-            token_ids = self.vocab['first_char_index'].get(ch, [])
-            result.extend(token_ids)
+            for token_id in self.vocab['first_char_index'].get(ch, []):
+                token_string = self.vocab['id_to_token'][str(token_id)]
+                if self._is_valid_continuation(current_number, token_string):
+                    result.append(token_id)
         return result
 
     def is_complete(self, current_number: str) -> bool:
@@ -148,7 +173,31 @@ class StringGrammar():
 
     def __init__(self, vocab: dict):
         self.vocab = vocab
-    
+        self.STATE_CHAR_VALIDITY: dict = {
+            "START": ['"'],
+            "IN_STRING": ['"', '\\'] + [chr(i) for i in range(32, 127) if chr(i) not in '"\\'],
+            "ESCAPE_CHAR": ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'],
+            "ESCAPE_U": list('0123456789abcdefABCDEF'),
+            "ESCAPE_U_DIGITS": list('0123456789abcdefABCDEF')
+        }
+        # IN_STRING allows almost the whole vocab, so precompute once instead of
+        # re-validating every token character-by-character on every generation step.
+        self._in_string_token_ids: list = self._build_in_string_token_ids()
+
+    def _build_in_string_token_ids(self) -> list:
+        """Tokens safe to emit anywhere while IN_STRING (no backslash, quote only as last char)."""
+        safe_ids: list = []
+        for token_id_str, token_string in self.vocab['id_to_token'].items():
+            if not token_string or '\\' in token_string:
+                continue
+            quote_idx = token_string.find('"')
+            if quote_idx != -1 and quote_idx != len(token_string) - 1:
+                continue
+            if any(not (32 <= ord(ch) <= 126) for ch in token_string):
+                continue
+            safe_ids.append(int(token_id_str))
+        return safe_ids
+
     def _get_state(self, current_string: str) -> str:
         """Return the grammar state for a partial JSON string.
         current_string is the string prefix generated so far.
@@ -189,29 +238,35 @@ class StringGrammar():
             return "IN_STRING"
     
 
+    def _is_valid_continuation(self, current_string: str, token_string: str) -> bool:
+        """Check every character of a multi-character token keeps the string valid."""
+        text = current_string
+        for ch in token_string:
+            state = self._get_state(text)
+            if state not in self.STATE_CHAR_VALIDITY or ch not in self.STATE_CHAR_VALIDITY[state]:
+                return False
+            text += ch
+        return True
+
     def get_valid_token_ids(self, current_string: str) -> list:
         """Returns A list of valid token ids that may be generated next in the current string state.
         Returns an empty list when the current state has no valid continuation.
         """
-        result: list = []
-        
-        state_char_validity: dict = {
-            "START": ['"'],
-            "IN_STRING": ['"', '\\'] + [chr(i) for i in range(32, 127) if chr(i) not in '"\\'],
-            "ESCAPE_CHAR": ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'],
-            "ESCAPE_U": list('0123456789abcdefABCDEF'),
-            "ESCAPE_U_DIGITS": list('0123456789abcdefABCDEF')
-        }
-
         state: str = self._get_state(current_string)
-        if not state in state_char_validity or state == "COPMPLETE":
+        if state not in self.STATE_CHAR_VALIDITY or state == "COMPLETE":
             return []
-        
-        valid_chars: list = state_char_validity[state]
+
+        if state == "IN_STRING":
+            return self._in_string_token_ids
+
+        result: list = []
+        valid_chars: list = self.STATE_CHAR_VALIDITY[state]
         for ch in valid_chars:
-            token_ids = self.vocab['first_char_index'].get(ch, [])
-            result.extend(token_ids)
-        
+            for token_id in self.vocab['first_char_index'].get(ch, []):
+                token_string = self.vocab['id_to_token'][str(token_id)]
+                if self._is_valid_continuation(current_string, token_string):
+                    result.append(token_id)
+
         return result
     
     def is_complete(self, current_string: str) -> bool:

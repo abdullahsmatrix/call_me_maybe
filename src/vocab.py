@@ -32,7 +32,7 @@ def build_vocab(model) -> dict:
     for k, v in vocab.items():
         for bpe_char, real_char in BPE_DECODE_TABLE.items():
             k = k.replace(bpe_char, real_char)
-        inverse_vocab[v] = k
+        inverse_vocab[str(v)] = k
         
     
     first_char_index: dict[str, list] = {}
@@ -40,7 +40,8 @@ def build_vocab(model) -> dict:
         first_char = token_string[0] if token_string else ""
         if first_char not in first_char_index:
             first_char_index[first_char] = []
-        first_char_index[first_char].append(token_id)
+        # keep ids as int here since they're used as logits array indices
+        first_char_index[first_char].append(int(token_id))
     
     return {
         "id_to_token": inverse_vocab,
