@@ -9,7 +9,7 @@ BPE_DECODE_TABLE = {
 
 def load_or_build_vocab(model) -> dict:
 
-    cache_path = Path("data/cache/cache.json")
+    cache_path: str = Path("data/cache/cache.json")
 
     
     try:

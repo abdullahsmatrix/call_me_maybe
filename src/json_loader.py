@@ -14,16 +14,16 @@ def load_json_file(filename: str) -> dict:
 
     except FileNotFoundError as err:
         print(err)
-        sys.exit()
+        sys.exit(1)
     except PermissionError as err:
         print(err)
-        sys.exit()
+        sys.exit(1)
     except json.JSONDecodeError as err:
-        print(err)
-        sys.exit()
+        print(f"Decode error in {filename[filename.rindex("/")+1:]}: {err}")
+        sys.exit(1)
     except Exception as err:
         print(f"An error occured. Details: {err}")
-        sys.exit()
+        sys.exit(1)
 
 
 def write_results_to_json(results: list[FunctionCallResults], output_path: str) -> None:
@@ -40,6 +40,9 @@ def write_results_to_json(results: list[FunctionCallResults], output_path: str) 
     try:
         with path_object.open("w") as file:
             json.dump(result_dict, file, indent=2)
-    except (PermissionError, OSError, IOError) as err:
+    except PermissionError as err:
+        print(f"Cannot write to file, {err}")
+        sys.exit(1)
+    except (OSError, IOError) as err:
         print(err)
-        sys.exit()
+        sys.exit(1)

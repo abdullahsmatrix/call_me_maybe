@@ -23,11 +23,11 @@ def main() -> None:
     #parse and validate json functions and prompts
     try:
         parsed = JsonParser(functions_definitions, input_prompts)
-        if parsed.error_log is not None:
+        if parsed.error_log:
             print(f"Error log: {parsed.error_log}")
-    except ValueError as err:
+    except (ValueError, Exception) as err:
         print(err)
-        sys.exit()
+        sys.exit(1)
     
     model = Small_LLM_Model()
     vocab: dict = load_or_build_vocab(model)
@@ -46,7 +46,5 @@ def main() -> None:
     write_results_to_json(results, args.output)
     
     print(f"Processing complete! {len(results)} function calls generated.")
-    
-
 if __name__ == "__main__":
     main()
