@@ -33,14 +33,14 @@
     "prompt": "Reverse the string 'hello'",
     "name": "fn_reverse_string",
     "parameters": {
-      "s": "'hello'"
+      "s": "description: 'hello'"
     }
   },
   {
     "prompt": "Reverse the string 'world'",
     "name": "fn_reverse_string",
     "parameters": {
-      "s": "'world'"
+      "s": "url"
     }
   },
   {
@@ -61,27 +61,27 @@
     "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",
     "name": "fn_substitute_string_with_regex",
     "parameters": {
-      "source_string": "description of the source string here: ",
-      "regex": "description of the regex pattern here: ",
-      "replacement": "description of the replacement string here: "
+      "source_string": "description: Hello 34 I'm 233 years old",
+      "regex": "/[0-9]+/g",
+      "replacement": "value: NUMBERS"
     }
   },
   {
     "prompt": "Replace all vowels in 'Programming is fun' with asterisks",
     "name": "fn_substitute_string_with_regex",
     "parameters": {
-      "source_string": "'Programming is fun' with asterisks', 'regex': '[^aeiouAEIOU]', 'replacement': '*'}",
-      "regex": "'[^aeiouAEIOU]''",
-      "replacement": "}*{source_string}*"
+      "source_string": "description: Programming is fun",
+      "regex": "/[aeiou]/g",
+      "replacement": "}*{}} (Note: The example has a typo in the parameters, but the format is correct as per the user's instruction. The actual parameters should be the source string, regex, and replacement string, each in their own fields. The example provided has a typo, but the format is"
     }
   },
   {
     "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'",
     "name": "fn_substitute_string_with_regex",
     "parameters": {
-      "source_string": "The cat sat on the mat with another cat",
-      "regex": "/cat/igm",
-      "replacement": "}dog"
+      "source_string": "description of the string to substitute: 'The cat sat on the mat with another cat' and regex: 'cat', replacement: 'dog'",
+      "regex": "'cat'?",
+      "replacement": "'dog'"
     }
   }
 ]
