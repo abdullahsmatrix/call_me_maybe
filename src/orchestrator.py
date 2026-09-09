@@ -8,6 +8,7 @@ from src.validation_models import FunctionCallResults, FunctionDef
 from src.grammar import TrieMatcher, NumberGrammar, StringGrammar
 from src.decoder import generate_constrained
 from llm_sdk import Small_LLM_Model
+from typing import Union
 
 
 def call_function(
@@ -114,6 +115,7 @@ def _generate_parameters(
         label_ids = model.encode(f'{separator}"{param_name}": ')[0].tolist()
         context_ids = context_ids + label_ids
 
+        grammar: Union[NumberGrammar, StringGrammar]
         if param_type.type == 'number':
             grammar = NumberGrammar(vocab)
         else:

@@ -17,5 +17,11 @@ dev = [
     "pytest>=9.1.1",
 ]
 
+[tool.mypy]
+ignore_missing_imports = true
+namespace_packages = true
+packages = ["src"]
+explicit_package_bases = true
+
 [tool.uv.sources]
 llm-sdk = { path = "llm_sdk.zip" }

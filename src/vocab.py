@@ -8,6 +8,7 @@ on every run.
 
 from pathlib import Path
 import json
+from typing import Any, cast
 
 BPE_DECODE_TABLE = {
     "Ġ": " ",
@@ -15,13 +16,13 @@ BPE_DECODE_TABLE = {
 }
 
 
-def load_or_build_vocab(model) -> dict:
+def load_or_build_vocab(model: Any) -> dict[Any, Any]:
     """Load cached vocab or build it from the model's vocab file."""
     cache_path: Path = Path("data/cache/cache.json")
 
     try:
         with cache_path.open("r") as file:
-            return json.load(file)
+            return cast(dict[Any, Any], json.load(file))
     except (FileNotFoundError, json.JSONDecodeError, PermissionError) as err:
         print(f"Error: {err}. Building vocab...")
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +32,7 @@ def load_or_build_vocab(model) -> dict:
             return vocab
 
 
-def build_vocab(model) -> dict:
+def build_vocab(model: Any) -> dict[Any, Any]:
     vocab_path = model.get_path_to_vocab_file()
     with open(vocab_path, "r") as file:
         vocab = json.load(file)

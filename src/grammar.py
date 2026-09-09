@@ -64,7 +64,7 @@ class TrieMatcher:
             if char not in current_node:
                 return False
             current_node = current_node[char]
-        return current_node.get("is_end", False)
+        return bool(current_node.get("is_end", False))
 
 
 class NumberGrammar:

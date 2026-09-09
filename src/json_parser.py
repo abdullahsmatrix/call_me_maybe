@@ -7,7 +7,7 @@ class JsonParser:
     def __init__(
         self,
         functions_definitions: list[Any],
-        input_prompts: list[dict[str]],
+        input_prompts: list[dict[str, Any]],
     ) -> None:
         self.functions_definitions = functions_definitions
         self.input_prompts = input_prompts

@@ -1,10 +1,11 @@
 import json
 import sys
-from .validation_models import FunctionCallResults
+from typing import Any
+from src.validation_models import FunctionCallResults
 from pathlib import Path
 
 
-def load_json_file(filename: str) -> dict:
+def load_json_file(filename: str) -> Any:
     """Load a JSON file and return its contents as a dict.
 
     Errors are printed to stderr and the process exits with status 1.

@@ -7,7 +7,7 @@ force the model to pick only valid options.
 """
 
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Any
 import numpy as np
 from src.grammar import TrieMatcher, NumberGrammar, StringGrammar
 
@@ -24,7 +24,7 @@ def mask_logits(logits: np.ndarray, valid_token_ids: list[int]) -> np.ndarray:
 
 
 def generate_constrained(
-    model,
+    model: Any,
     input_ids: list[int],
     grammar: Union[TrieMatcher, NumberGrammar, StringGrammar],
     vocab: dict,

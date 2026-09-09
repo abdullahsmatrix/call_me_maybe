@@ -11,14 +11,14 @@ from llm_sdk import Small_LLM_Model
 
 
 def main() -> None:
-    results: list = []
+    results: list[Any] = []
 
     args = parse_arguements()
     # Load JSON function definitions and input prompts
-    functions_definitions: list[Any] = load_json_file(
+    functions_definitions = load_json_file(
         args.functions_definition
     )
-    input_prompts: list[dict[str]] = load_json_file(args.input)
+    input_prompts = load_json_file(args.input)
 
     # Parse and validate json functions and prompts
     try:
