@@ -1,17 +1,24 @@
+"""Utilities for loading and building the model vocabulary.
+
+The vocabulary maps token strings to integer ids (BPE tokens). When a
+token contains BPE markers they are decoded to human characters using
+the `BPE_DECODE_TABLE`. The built vocab is cached to avoid rebuilding
+on every run.
+"""
+
 from pathlib import Path
 import json
 
 BPE_DECODE_TABLE = {
-    'Ġ': ' ',
-    'Ċ': '\n'
+    "Ġ": " ",
+    "Ċ": "\n",
 }
 
 
 def load_or_build_vocab(model) -> dict:
+    """Load cached vocab or build it from the model's vocab file."""
+    cache_path: Path = Path("data/cache/cache.json")
 
-    cache_path: str = Path("data/cache/cache.json")
-
-    
     try:
         with cache_path.open("r") as file:
             return json.load(file)
@@ -22,7 +29,8 @@ def load_or_build_vocab(model) -> dict:
         with cache_path.open("w") as file:
             json.dump(vocab, file)
             return vocab
-    
+
+
 def build_vocab(model) -> dict:
     vocab_path = model.get_path_to_vocab_file()
     with open(vocab_path, "r") as file:
@@ -33,8 +41,7 @@ def build_vocab(model) -> dict:
         for bpe_char, real_char in BPE_DECODE_TABLE.items():
             k = k.replace(bpe_char, real_char)
         inverse_vocab[str(v)] = k
-        
-    
+
     first_char_index: dict[str, list] = {}
     for token_id, token_string in inverse_vocab.items():
         first_char = token_string[0] if token_string else ""
@@ -42,9 +49,8 @@ def build_vocab(model) -> dict:
             first_char_index[first_char] = []
         # keep ids as int here since they're used as logits array indices
         first_char_index[first_char].append(int(token_id))
-    
+
     return {
         "id_to_token": inverse_vocab,
-        "first_char_index": first_char_index
+        "first_char_index": first_char_index,
     }
-

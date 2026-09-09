@@ -1,4 +1,4 @@
-#from grammar.py import TrieMatcher
+# from grammar.py import TrieMatcher
 # # from models import FunctionDef
 # from arguement_parser import parse_arguements
 # from json_loader import load_json_file
@@ -25,13 +25,12 @@
 # for k, v in vocab.items():
 #     # 1. Clean the key string and assign it to a new variable
 #     cleaned_key = k.replace('Ġ', ' ').replace('Ċ', '\n')
-    
+
 #     # 2. Map the value to the newly cleaned key in inverse_vocab
 #     inverse_vocab[clean] = cleaned_key
 
 # print(inverse_vocab)
 # # Output: {123: 'aaaa ee', 456: 'bbbb\nff'}
-
 
 
 # print(voca)

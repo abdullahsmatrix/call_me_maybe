@@ -6,21 +6,21 @@ from src.json_parser import JsonParser
 
 
 import sys
-from pydantic import ValidationError
 from typing import Any
 from llm_sdk import Small_LLM_Model
 
 
 def main() -> None:
-
     results: list = []
 
     args = parse_arguements()
-    #Load JSON function definitions and input prompts
-    functions_definitions: list[Any] = load_json_file(args.functions_definition)
+    # Load JSON function definitions and input prompts
+    functions_definitions: list[Any] = load_json_file(
+        args.functions_definition
+    )
     input_prompts: list[dict[str]] = load_json_file(args.input)
 
-    #parse and validate json functions and prompts
+    # Parse and validate json functions and prompts
     try:
         parsed = JsonParser(functions_definitions, input_prompts)
         if parsed.error_log:
@@ -28,7 +28,7 @@ def main() -> None:
     except (ValueError, Exception) as err:
         print(err)
         sys.exit(1)
-    
+
     model = Small_LLM_Model()
     vocab: dict = load_or_build_vocab(model)
 
@@ -44,7 +44,9 @@ def main() -> None:
 
         results.append(result)
     write_results_to_json(results, args.output)
-    
+
     print(f"Processing complete! {len(results)} function calls generated.")
+
+
 if __name__ == "__main__":
     main()

@@ -1,24 +1,18 @@
-"""
-This Module is grammar primitatives. Without grammar the model hallucinates.
-The output is not certain that it will give JSON schema. We apply 
-TrieMatcher for function names at each token generation step. eg; after
-generating "f" only tokens that start with "n_" are allowed to continue.
-The logits for invalid tokens are masked to negative INF. Model cant deviate.
-It is forced to generate guaranteed ouput.
+"""Grammar primitives used to constrain model token generation.
+
+Without a grammar the model may hallucinate outputs that do not form
+valid JSON. This module provides matchers (TrieMatcher) and grammars
+for numbers and strings so decoding can mask invalid tokens in real
+time and only allow syntactically valid continuations.
 """
 
-class TrieMatcher():
+
+class TrieMatcher:
     def __init__(self, candidates: list[str], vocab: dict) -> None:
-        """TrieMatcher Initializer. We create a tree data structure using
-        dictionary. Each node have children node for next possible chars.
-        if it is at the end, final node is marked as "is_end" = True.
+        """Build a trie from candidate strings for prefix matching.
 
-        eg; {"f": {"n": {"_": {"a": {...},
-                               "g": {...},
-                        }     }
-                   }
-            }
-            
+        Each node is a dict mapping characters to child nodes. A terminal
+        node is marked by the key "is_end".
         """
 
         self.candidates = candidates
@@ -32,9 +26,9 @@ class TrieMatcher():
                     current_node[char] = {}
                 current_node = current_node[char]
             current_node["is_end"] = True
-    
+
     def _walk(self, node: dict, text: str) -> dict | None:
-        """Walk every character of text from node, or None if it falls off the trie."""
+        """Walk characters of text from node or return None if it falls off."""
         for char in text:
             if char not in node:
                 return None
@@ -42,12 +36,10 @@ class TrieMatcher():
         return node
 
     def get_valid_token_ids(self, current_prefix: str) -> list[int]:
-        """In this function we get a list of valid token Ids. Lets say we are
-        in "fn_". our functions are "fn_add_numbers" and "fn_greet". The func
-        returns tokend IDs for "a" and "g" as a list.
+        """Return list of token ids that continue the given prefix.
 
-        Tokens are multi-character (BPE), so a whole candidate token must be
-        walked through the trie, not just its first character.
+        Tokens use BPE, so each candidate token must be walked through the
+        trie rather than only considering the first character.
         """
         result: list = []
         current_node = self.trie_dict
@@ -64,80 +56,103 @@ class TrieMatcher():
                     result.append(token_id)
 
         return result
-    
+
     def is_complete(self, current_prefix: str) -> bool:
-        """checker function to see if the prefix is complete candidate"""
+        """Return True if prefix matches a complete candidate string."""
         current_node = self.trie_dict
         for char in current_prefix:
             if char not in current_node:
                 return False
             current_node = current_node[char]
         return current_node.get("is_end", False)
-            
 
-class NumberGrammar():
-    """Validate and constrain partial numeric literals while they are generated.
 
-    This grammar tracks the current lexical state of a number and decides which
-    next characters are allowed for integer, decimal, and exponent forms.
-    It is used to mask invalid tokens so the model only emits syntactically valid
-    numeric values.
+class NumberGrammar:
+    """Constrain partial numeric literals during generation.
+
+    Tracks the lexical state of a number and decides which characters are
+    allowed next for integers, decimals, and exponents.
     """
 
     def __init__(self, vocab: dict):
-        """
-        Vocab is  Mapping from token characters to token ids, used to resolve valid next
-        tokens for each allowed character.
-        """
+        """Vocab maps token characters to token ids for token resolution."""
         self.vocab = vocab
         self.STATE_CHAR_VALIDITY: dict = {
-            "START": ["-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "DIGITS": [".", "e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "DECIMAL_POINT": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "FRACTION_DIGITS": ["e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "EXPONENT_SIGN": ["+", "-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "EXPONENT_SIGN_DONE": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            "EXPONENT_DIGITS": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+            "START": [
+                "-", "0", "1", "2", "3", "4", "5",
+                "6", "7", "8", "9",
+            ],
+            "DIGITS": [
+                ".", "e", "E", "0", "1", "2", "3", "4",
+                "5", "6", "7", "8", "9",
+            ],
+            "DECIMAL_POINT": [
+                "0", "1", "2", "3", "4", "5", "6",
+                "7", "8", "9",
+            ],
+            "FRACTION_DIGITS": [
+                "e", "E", "0", "1", "2", "3", "4",
+                "5", "6", "7", "8", "9",
+            ],
+            "EXPONENT_SIGN": [
+                "+", "-", "0", "1", "2", "3", "4",
+                "5", "6", "7", "8", "9",
+            ],
+            "EXPONENT_SIGN_DONE": [
+                "0", "1", "2", "3", "4", "5", "6",
+                "7", "8", "9",
+            ],
+            "EXPONENT_DIGITS": [
+                "0", "1", "2", "3", "4", "5", "6",
+                "7", "8", "9",
+            ],
         }
 
     def _get_state(self, current_number: str) -> str:
-        # In this method we return the current grammar state for a partial numeric string.
-
+        # Return the current grammar state for a partial numeric string.
         if not current_number:
             return "START"
         elif not any(ch in current_number for ch in ".eE"):
             return "DIGITS"
         elif current_number.endswith("."):
             return "DECIMAL_POINT"
-        elif "." in current_number and not any(ch in current_number for ch in "eE"):
+        elif "." in current_number and not any(
+            ch in current_number for ch in "eE"
+        ):
             return "FRACTION_DIGITS"
         for ch in "eE":
             if ch in current_number:
                 idx = current_number.index(ch)
-                nxt_chr = current_number[idx + 1] if idx+1 < len(current_number) else None
+                has_next = idx + 1 < len(current_number)
+                nxt_chr = current_number[idx + 1] if has_next else None
                 if nxt_chr == "+" or nxt_chr == "-":
                     return "EXPONENT_SIGN_DONE"
         if current_number.endswith("e") or current_number.endswith("E"):
             return "EXPONENT_SIGN"
-        elif any(ch in current_number for ch in ("e", "E")) and current_number[-1].isnumeric():
+        elif any(ch in current_number for ch in ("e", "E")) and (
+            current_number[-1].isnumeric()
+        ):
             return "EXPONENT_DIGITS"
 
         return "UNKNOWN"
 
-    def _is_valid_continuation(self, current_number: str, token_string: str) -> bool:
-        """Check every character of a multi-character token keeps the number valid."""
+    def _is_valid_continuation(
+        self, current_number: str, token_string: str
+    ) -> bool:
+        """Check each char of multi-char token keeps number valid."""
         text = current_number
         for ch in token_string:
             state = self._get_state(text)
-            if state not in self.STATE_CHAR_VALIDITY or ch not in self.STATE_CHAR_VALIDITY[state]:
+            if (
+                state not in self.STATE_CHAR_VALIDITY
+                or ch not in self.STATE_CHAR_VALIDITY[state]
+            ):
                 return False
             text += ch
         return True
 
     def get_valid_token_ids(self, current_number: str) -> list:
-        """
-        In this method we return all token ids for characters valid in the current number state.
-        """
+        """Return all token ids for valid chars in current state."""
         result: list = []
         state: str = self._get_state(current_number)
         if state not in self.STATE_CHAR_VALIDITY:
@@ -146,52 +161,71 @@ class NumberGrammar():
         for ch in valid_chars:
             for token_id in self.vocab['first_char_index'].get(ch, []):
                 token_string = self.vocab['id_to_token'][str(token_id)]
-                if self._is_valid_continuation(current_number, token_string):
+                if self._is_valid_continuation(
+                    current_number, token_string
+                ):
                     result.append(token_id)
         return result
 
     def is_complete(self, current_number: str) -> bool:
-        """Check whether the provided number string is complete and valid.
+        """Check if the number string is complete and valid.
 
-        A number is considered complete when it is not empty, is not just a sign,
-        and does not end with a character that would require another numeric
-        digit or exponent component.
+        A number is complete when not empty, not just a sign,
+        and does not end with a char requiring another digit
+        or exponent component.
         """
         is_valid: bool = True
-        if not current_number or current_number == "+" or current_number == "-":
+        has_sign_only = (
+            not current_number
+            or current_number == "+"
+            or current_number == "-"
+        )
+        if has_sign_only:
             is_valid = False
-        elif any(current_number.endswith(ch) for ch in (".", "e", "E", "e+", "E+", "e-", "E-")):
+        elif any(
+            current_number.endswith(ch)
+            for ch in (".", "e", "E", "e+", "E+", "e-", "E-")
+        ):
             is_valid = False
         return is_valid
 
 
-class StringGrammar():
-    """This class validates partial string that is being generated.
-    The grammar tracks whether generation is starting, inside a string, or
-    completing an escape sequence, then limits the next token accordingly.
-    """
+class StringGrammar:
+    """Validate partial JSON strings during token generation."""
 
     def __init__(self, vocab: dict):
         self.vocab = vocab
         self.STATE_CHAR_VALIDITY: dict = {
             "START": ['"'],
-            "IN_STRING": ['"', '\\'] + [chr(i) for i in range(32, 127) if chr(i) not in '"\\'],
+            "IN_STRING": (
+                ['"', '\\']
+                + [chr(i) for i in range(32, 127) if chr(i) not in '"\\']
+            ),
             "ESCAPE_CHAR": ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'],
             "ESCAPE_U": list('0123456789abcdefABCDEF'),
-            "ESCAPE_U_DIGITS": list('0123456789abcdefABCDEF')
+            "ESCAPE_U_DIGITS": list('0123456789abcdefABCDEF'),
         }
-        # IN_STRING allows almost the whole vocab, so precompute once instead of
-        # re-validating every token character-by-character on every generation step.
+
+        # IN_STRING allows almost the whole vocab, so precompute once
+        # instead of re-validating every token character-by-character on
+        # re-validating every token character-by-character on every generation
+        # step.
         self._in_string_token_ids: list = self._build_in_string_token_ids()
 
     def _build_in_string_token_ids(self) -> list:
-        """Tokens safe to emit anywhere while IN_STRING (no backslash, quote only as last char)."""
+        """Tokens safe to emit while IN_STRING.
+
+        No backslash, quote only as last char.
+        """
         safe_ids: list = []
         for token_id_str, token_string in self.vocab['id_to_token'].items():
             if not token_string or '\\' in token_string:
                 continue
             quote_idx = token_string.find('"')
-            if quote_idx != -1 and quote_idx != len(token_string) - 1:
+            if (
+                quote_idx != -1
+                and quote_idx != len(token_string) - 1
+            ):
                 continue
             if any(not (32 <= ord(ch) <= 126) for ch in token_string):
                 continue
@@ -200,9 +234,10 @@ class StringGrammar():
 
     def _get_state(self, current_string: str) -> str:
         """Return the grammar state for a partial JSON string.
-        current_string is the string prefix generated so far.
-        returns current state, such as ``START``, ``IN_STRING``,
-            ``ESCAPE_CHAR``, or ``COMPLETE``.
+
+        Args: current_string is the string prefix generated so far.
+        Returns: current state like START, IN_STRING, ESCAPE_CHAR,
+            or COMPLETE.
         """
         if not current_string:
             return "START"
@@ -210,47 +245,56 @@ class StringGrammar():
             return "UNKNOWN"
         if current_string.endswith('"') and len(current_string) > 1:
             return "COMPLETE"
-        
-        #look for incomplete \uXXX pattern
+
+        # look for incomplete \uXXX pattern
         if '\\u' in current_string:
             last_u_idx: int = current_string.rfind('\\u')
             if last_u_idx != -1:
                 hex_part: str = current_string[last_u_idx + 2:]
-                if len(hex_part) < 4 and all(c in '0123456789abcdefABCDEF' for c in hex_part):
+                if (
+                    len(hex_part) < 4
+                    and all(c in '0123456789abcdefABCDEF' for c in hex_part)
+                ):
                     if len(hex_part) == 0:
                         return "ESCAPE_U"
                     else:
                         return "ESCAPE_U_DIGITS"
-        
-        #count trailing backslashes
+
+        # count trailing backslashes
         trailing_backslashes: int = 0
         for i in range(len(current_string) - 1, 0, -1):
             if current_string[i] == '\\':
                 trailing_backslashes += 1
             else:
                 break
-        
+
         if trailing_backslashes % 2 == 1:
-            #odd! last backslash is unescaped
+            # odd: last backslash is unescaped
             return "ESCAPE_CHAR"
         else:
-            #Even! all backslashes are escaped
+            # even: all backslashes are escaped
             return "IN_STRING"
-    
 
-    def _is_valid_continuation(self, current_string: str, token_string: str) -> bool:
-        """Check every character of a multi-character token keeps the string valid."""
+    def _is_valid_continuation(
+        self, current_string: str, token_string: str
+    ) -> bool:
+        """Check each char of multi-char token keeps string valid."""
         text = current_string
         for ch in token_string:
             state = self._get_state(text)
-            if state not in self.STATE_CHAR_VALIDITY or ch not in self.STATE_CHAR_VALIDITY[state]:
+            if (
+                state not in self.STATE_CHAR_VALIDITY
+                or ch not in self.STATE_CHAR_VALIDITY[state]
+            ):
                 return False
             text += ch
         return True
 
     def get_valid_token_ids(self, current_string: str) -> list:
-        """Returns A list of valid token ids that may be generated next in the current string state.
-        Returns an empty list when the current state has no valid continuation.
+        """Return list of valid token ids for current string state.
+
+        Returns an empty list when the current state has no valid
+        continuation.
         """
         state: str = self._get_state(current_string)
         if state not in self.STATE_CHAR_VALIDITY or state == "COMPLETE":
@@ -264,11 +308,13 @@ class StringGrammar():
         for ch in valid_chars:
             for token_id in self.vocab['first_char_index'].get(ch, []):
                 token_string = self.vocab['id_to_token'][str(token_id)]
-                if self._is_valid_continuation(current_string, token_string):
+                if self._is_valid_continuation(
+                    current_string, token_string
+                ):
                     result.append(token_id)
 
         return result
-    
+
     def is_complete(self, current_string: str) -> bool:
-        """Check whether the string has a closing quote and is complete."""
+        """Return True if string has closing quote and is complete."""
         return self._get_state(current_string) == "COMPLETE"
