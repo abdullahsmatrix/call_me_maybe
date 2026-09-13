@@ -4,11 +4,16 @@ This module drives the decoder and grammars to produce a single JSON
 object containing the chosen function `name` and its `parameters`.
 """
 
+import re
+
 from src.validation_models import FunctionCallResults, FunctionDef
 from src.grammar import TrieMatcher, NumberGrammar, IntegerGrammar, StringGrammar
 from src.decoder import generate_constrained
 from llm_sdk import Small_LLM_Model
-from typing import Union
+from typing import Optional, Union
+
+_SINGLE_QUOTED_RE = re.compile(r"'([^']*)'")
+_DOUBLE_QUOTED_RE = re.compile(r'"([^"]*)"')
 
 
 def call_function(
@@ -35,15 +40,35 @@ def call_function(
     context_ids = context_ids + scaffold_ids
 
     function_def = _find_function_def(function_name, available_functions)
+    quoted_span = _find_unambiguous_quoted_span(prompt)
     parameters, context_ids = _generate_parameters(
         function_def,
         model,
         vocab,
-        context_ids
+        context_ids,
+        quoted_span,
     )
 
     result = _build_result(prompt, function_name, parameters)
     return result
+
+
+def _find_unambiguous_quoted_span(prompt: str) -> Optional[str]:
+    """Return the text inside a quoted span in the prompt, but only when
+    exactly one such span (single- or double-quoted) exists.
+
+    Quoting a literal value is a generic natural-language convention, not
+    tied to any specific function or keyword, so this generalizes across
+    arbitrary prompts/function sets rather than pattern-matching one
+    domain's phrasing. With zero or multiple quoted spans there is no
+    unambiguous single answer, so no correction is offered.
+    """
+    spans: list[str] = (
+        _SINGLE_QUOTED_RE.findall(prompt) + _DOUBLE_QUOTED_RE.findall(prompt)
+    )
+    if len(spans) == 1:
+        return spans[0]
+    return None
 
 
 def _build_instruction_prefix(
@@ -59,9 +84,10 @@ def _build_instruction_prefix(
         "- For number/integer parameters: extract the EXACT numbers the",
         "  user actually wrote in their request, never a placeholder or",
         "  example value.",
-        "- For string parameters: extract the EXACT text the user is",
-        "  referring to. Do NOT add prefixes like 'description:' or",
-        "  'user_', and do NOT include surrounding quotes in the value.",
+        "- For string parameters: extract the EXACT text being referred",
+        "  to. Do NOT restate the parameter's own name inside the value",
+        "  (write utf-8, not encoding=utf-8). Do NOT add any other prefix",
+        "  either, and do NOT include surrounding quotes in the value.",
         "",
         "How to read values out of the request (the function name and",
         "parameter names must always come from the list below, never",
@@ -114,7 +140,8 @@ def _generate_parameters(
     function_def: FunctionDef,
     model: Small_LLM_Model,
     vocab: dict,
-    context_ids: list[int]
+    context_ids: list[int],
+    quoted_span: Optional[str] = None,
 ) -> tuple[dict[str, float | str | int | bool], list[int]]:
     """Generate values for each parameter using appropriate grammar.
 
@@ -122,6 +149,7 @@ def _generate_parameters(
     generated tokens.
     """
     parameters: dict = {}
+    quoted_span_used = False
     for i, (param_name, param_type) in enumerate(
         function_def.parameters.items()
     ):
@@ -158,8 +186,40 @@ def _generate_parameters(
             parameters[param_name] = value_text == 'true'
         else:
             # remove surrounding quotes: "\"hello\"" -> "hello"
-            parameters[param_name] = value_text.strip('"')
+            cleaned = value_text.strip('"')
+            cleaned = _clean_string_value(cleaned, param_name)
+            # If the prompt had exactly one unambiguous quoted literal and
+            # the model's own generated text already contains it, prefer
+            # the crisp original over whatever noise the model wrapped
+            # around it - but only once per call, so it can't be forced
+            # onto more than one parameter.
+            if (
+                quoted_span is not None
+                and not quoted_span_used
+                and quoted_span in cleaned
+            ):
+                cleaned = quoted_span
+                quoted_span_used = True
+            parameters[param_name] = cleaned
     return parameters, context_ids
+
+
+def _clean_string_value(value: str, param_name: str) -> str:
+    """Strip a leaked scaffold/label fragment from a generated string.
+
+    The model sometimes prepends a fragment of our own prompt framing
+    (e.g. "user:") or restates the parameter's own name ("encoding=")
+    instead of emitting just the extracted value. These are the model's
+    own artifacts, not part of the requested value, so they are stripped
+    deterministically after generation rather than something the grammar
+    itself should be asked to prevent.
+    """
+    cleaned = value.strip()
+    for prefix in (f"{param_name}=", f"{param_name}:", "user:", "user_"):
+        if cleaned.lower().startswith(prefix.lower()):
+            cleaned = cleaned[len(prefix):].lstrip()
+            break
+    return cleaned
 
 
 def _find_function_def(
