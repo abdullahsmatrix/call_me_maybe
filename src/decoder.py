@@ -42,6 +42,20 @@ def generate_constrained(
         if not valid_tokens:
             break  # grammar dead end, nothing valid can continue
         logits = model.get_logits_from_input_ids(input_ids)
+
+        if grammar.is_complete(accumulated_text):
+            # Some states (e.g. mid-digits of a number) are both a legal
+            # stopping point and a legal continuation - "1" is already a
+            # complete JSON number, so is_complete() alone can't tell us
+            # whether the model actually wants to stop here or keep going
+            # with more digits. Check the model's own unconstrained top
+            # choice: only stop if it would pick something outside the
+            # grammar anyway (e.g. a comma or closing brace). Otherwise a
+            # multi-digit number would always be cut off after one digit.
+            raw_top = int(np.argmax(logits))
+            if raw_top not in valid_tokens:
+                break
+
         masked_logits = mask_logits(logits, valid_tokens)
         next_token_id = int(np.argmax(masked_logits))
 
@@ -49,7 +63,16 @@ def generate_constrained(
         accumulated_text += vocab['id_to_token'][str(next_token_id)]
         generated_token_ids.append(next_token_id)
         input_ids.append(next_token_id)
-        if grammar.is_complete(accumulated_text):
+
+        # Cheap (no model call) look-ahead: if the value is now complete
+        # and there is genuinely nothing left it could legally continue
+        # with (e.g. a string's closing quote), stop right away instead
+        # of spending an extra forward pass just to discover that next
+        # iteration.
+        if (
+            grammar.is_complete(accumulated_text)
+            and not grammar.get_valid_token_ids(accumulated_text)
+        ):
             break
 
     return (accumulated_text, generated_token_ids)
