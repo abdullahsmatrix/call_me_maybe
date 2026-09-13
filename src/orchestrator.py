@@ -63,6 +63,14 @@ def _build_instruction_prefix(
         "  referring to. Do NOT add prefixes like 'description:' or",
         "  'user_', and do NOT include surrounding quotes in the value.",
         "",
+        "How to read values out of the request (the function name and",
+        "parameter names must always come from the list below, never",
+        "from these illustrations):",
+        "- \"add 91 grams using the fold method\" -> the number is 91,",
+        "  the method text is \"fold\".",
+        "- \"label the box 'kitchen items' as fragile\" -> the quoted",
+        "  text is one value, \"fragile\" is the other value.",
+        "",
         "Available functions:",
     ]
     for func in available_functions:
