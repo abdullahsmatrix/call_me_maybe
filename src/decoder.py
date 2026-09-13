@@ -9,7 +9,9 @@ force the model to pick only valid options.
 
 from typing import Union, Tuple, Any
 import numpy as np
-from src.grammar import TrieMatcher, NumberGrammar, IntegerGrammar, StringGrammar
+from src.grammar import (
+    TrieMatcher, NumberGrammar, IntegerGrammar, StringGrammar,
+)
 
 
 def mask_logits(logits: np.ndarray, valid_token_ids: list[int]) -> np.ndarray:
