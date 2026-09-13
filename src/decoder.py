@@ -9,7 +9,7 @@ force the model to pick only valid options.
 
 from typing import Union, Tuple, Any
 import numpy as np
-from src.grammar import TrieMatcher, NumberGrammar, StringGrammar
+from src.grammar import TrieMatcher, NumberGrammar, IntegerGrammar, StringGrammar
 
 
 def mask_logits(logits: np.ndarray, valid_token_ids: list[int]) -> np.ndarray:
@@ -26,7 +26,7 @@ def mask_logits(logits: np.ndarray, valid_token_ids: list[int]) -> np.ndarray:
 def generate_constrained(
     model: Any,
     input_ids: list[int],
-    grammar: Union[TrieMatcher, NumberGrammar, StringGrammar],
+    grammar: Union[TrieMatcher, NumberGrammar, IntegerGrammar, StringGrammar],
     vocab: dict,
     max_iterations: int = 60,
 ) -> Tuple[str, list[int]]:

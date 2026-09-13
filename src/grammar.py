@@ -190,6 +190,56 @@ class NumberGrammar:
         return is_valid
 
 
+class IntegerGrammar:
+    """Constrain generation to valid JSON integers (optional sign + digits).
+
+    Unlike NumberGrammar, no decimal point or exponent is ever allowed.
+    """
+
+    def __init__(self, vocab: dict):
+        self.vocab = vocab
+        self.STATE_CHAR_VALIDITY: dict = {
+            "START": [
+                "-", "0", "1", "2", "3", "4", "5",
+                "6", "7", "8", "9",
+            ],
+            "DIGITS": [
+                "0", "1", "2", "3", "4", "5",
+                "6", "7", "8", "9",
+            ],
+        }
+
+    def _get_state(self, current_number: str) -> str:
+        return "START" if not current_number else "DIGITS"
+
+    def _is_valid_continuation(
+        self, current_number: str, token_string: str
+    ) -> bool:
+        """Check each char of a multi-char token keeps the integer valid."""
+        text = current_number
+        for ch in token_string:
+            state = self._get_state(text)
+            if ch not in self.STATE_CHAR_VALIDITY[state]:
+                return False
+            text += ch
+        return True
+
+    def get_valid_token_ids(self, current_number: str) -> list:
+        """Return all token ids for valid chars in the current state."""
+        result: list = []
+        state: str = self._get_state(current_number)
+        for ch in self.STATE_CHAR_VALIDITY[state]:
+            for token_id in self.vocab['first_char_index'].get(ch, []):
+                token_string = self.vocab['id_to_token'][str(token_id)]
+                if self._is_valid_continuation(current_number, token_string):
+                    result.append(token_id)
+        return result
+
+    def is_complete(self, current_number: str) -> bool:
+        """An integer is complete once it's non-empty and not just a sign."""
+        return bool(current_number) and current_number != "-"
+
+
 class StringGrammar:
     """Validate partial JSON strings during token generation."""
 

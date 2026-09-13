@@ -24,7 +24,9 @@ def main() -> None:
     try:
         parsed = JsonParser(functions_definitions, input_prompts)
         if parsed.error_log:
-            print(f"Error log: {parsed.error_log}")
+            print("Error log:")
+            for entry in parsed.error_log:
+                print(f"  - {entry}")
     except (ValueError, Exception) as err:
         print(err)
         sys.exit(1)

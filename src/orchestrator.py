@@ -5,7 +5,7 @@ object containing the chosen function `name` and its `parameters`.
 """
 
 from src.validation_models import FunctionCallResults, FunctionDef
-from src.grammar import TrieMatcher, NumberGrammar, StringGrammar
+from src.grammar import TrieMatcher, NumberGrammar, IntegerGrammar, StringGrammar
 from src.decoder import generate_constrained
 from llm_sdk import Small_LLM_Model
 from typing import Union
@@ -55,6 +55,15 @@ def _build_instruction_prefix(
         "Choose exactly one function that satisfies the user's request",
         "and provide its parameters.",
         "",
+        "CRITICAL RULES FOR PARAMETER VALUES:",
+        "- For number parameters: Extract the EXACT numbers from the user's request.",
+        "  Example: 'sum of 265 and 345' means a=265.0, b=345.0",
+        "  Do NOT use example values like 2.0 or 3.0.",
+        "- For string parameters: Extract the EXACT text within quotes.",
+        "  Example: 'Reverse the string hello' means s=hello",
+        "  Do NOT add prefixes like 'description:' or 'user_'.",
+        "  Do NOT include the quotes themselves in the value.",
+        "",
         "Available functions:",
     ]
     for func in available_functions:
@@ -68,9 +77,16 @@ def _build_instruction_prefix(
         )
         lines.append(func_call)
     lines.append("")
-    lines.append(f'User request: "{prompt}"')
+    lines.append("Examples of correct value extraction:")
+    lines.append('User: "What is the sum of 2 and 3?" → {"name": "fn_add_numbers", "parameters": {"a": 2.0, "b": 3.0}}')
+    lines.append('User: "What is the sum of 265 and 345?" → {"name": "fn_add_numbers", "parameters": {"a": 265.0, "b": 345.0}}')
+    lines.append('User: "Reverse the string hello" → {"name": "fn_reverse_string", "parameters": {"s": "hello"}}')
+    lines.append('User: "Greet shrek" → {"name": "fn_greet", "parameters": {"name": "shrek"}}')
+    lines.append('User: "Calculate the square root of 144" → {"name": "fn_get_square_root", "parameters": {"a": 144.0}}')
     lines.append("")
-    lines.append('Answer:\n{"name": "')
+    lines.append(f'User: "{prompt}"')
+    lines.append("")
+    lines.append('Answer: {"name": "')
     return "\n".join(lines)
 
 
@@ -99,7 +115,7 @@ def _generate_parameters(
     model: Small_LLM_Model,
     vocab: dict,
     context_ids: list[int]
-) -> tuple[dict[str, float | str], list[int]]:
+) -> tuple[dict[str, float | str | int | bool], list[int]]:
     """Generate values for each parameter using appropriate grammar.
 
     Returns the parameters dict and the context extended with all
@@ -115,9 +131,13 @@ def _generate_parameters(
         label_ids = model.encode(f'{separator}"{param_name}": ')[0].tolist()
         context_ids = context_ids + label_ids
 
-        grammar: Union[NumberGrammar, StringGrammar]
+        grammar: Union[NumberGrammar, IntegerGrammar, StringGrammar, TrieMatcher]
         if param_type.type == 'number':
             grammar = NumberGrammar(vocab)
+        elif param_type.type == 'integer':
+            grammar = IntegerGrammar(vocab)
+        elif param_type.type == 'boolean':
+            grammar = TrieMatcher(['true', 'false'], vocab)
         else:
             grammar = StringGrammar(vocab)
         # generate value with constraints
@@ -132,6 +152,10 @@ def _generate_parameters(
         if param_type.type == 'number':
             # convert string to float
             parameters[param_name] = float(value_text)
+        elif param_type.type == 'integer':
+            parameters[param_name] = int(value_text)
+        elif param_type.type == 'boolean':
+            parameters[param_name] = value_text == 'true'
         else:
             # remove surrounding quotes: "\"hello\"" -> "hello"
             parameters[param_name] = value_text.strip('"')

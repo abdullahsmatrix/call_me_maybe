@@ -14,7 +14,8 @@ class JsonParser:
         self.validated_functions: list = []
         self.validated_prompts: list = []
         self.error_log: list = []
-        for functions_definition in self.functions_definitions:
+        definitions = enumerate(self.functions_definitions)
+        for index, functions_definition in definitions:
             # checks if the JSON object is valid against pydantic base
             # model and appends to the list
             try:
@@ -22,15 +23,25 @@ class JsonParser:
                     FunctionDef.model_validate(functions_definition)
                 )
             except ValidationError as err:
-                self.error_log.append(err)
+                name = (
+                    functions_definition.get("name", "<unnamed>")
+                    if isinstance(functions_definition, dict)
+                    else "<unnamed>"
+                )
+                self.error_log.append(
+                    f"Skipped function definition #{index} "
+                    f"('{name}'): {err}"
+                )
 
-        for input_prompt in self.input_prompts:
+        for index, input_prompt in enumerate(self.input_prompts):
             try:
                 self.validated_prompts.append(
                     PromptEntry.model_validate(input_prompt)
                 )
             except ValidationError as err:
-                self.error_log.append(err)
+                self.error_log.append(
+                    f"Skipped input prompt #{index}: {err}"
+                )
 
         if not self.validated_functions:
             msg = "No valid function definition found"
