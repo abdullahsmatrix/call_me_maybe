@@ -52,6 +52,24 @@ def _has_repetition_loop(
     return False
 
 
+def _would_extend_repetition(
+    token_ids: list[int],
+    candidate: int,
+    max_period: int = 8,
+    min_repeats: int = 3,
+) -> bool:
+    """Would appending `candidate` lock in a repeating loop right now?
+
+    Reuses the same detector as the reactive guard above, but applied
+    one token *before* it happens: this lets greedy decoding be steered
+    away from a loop by trying the next-best token instead, rather than
+    only discovering the loop after it has already locked in.
+    """
+    return _has_repetition_loop(
+        token_ids + [candidate], max_period, min_repeats
+    )
+
+
 def generate_constrained(
     model: Any,
     input_ids: list[int],
@@ -88,6 +106,20 @@ def generate_constrained(
         masked_logits = mask_logits(logits, valid_tokens)
         next_token_id = int(np.argmax(masked_logits))
 
+        # Proactively steer away from locking into a repeating loop:
+        # if the greedy pick would complete one, try the next-best
+        # valid token instead (bounded attempts so this can't spin).
+        attempts = 0
+        while (
+            attempts < 5
+            and _would_extend_repetition(generated_token_ids, next_token_id)
+        ):
+            masked_logits[next_token_id] = -np.inf
+            if not np.isfinite(masked_logits).any():
+                break  # no non-repeating valid alternative left
+            next_token_id = int(np.argmax(masked_logits))
+            attempts += 1
+
         # id_to_token keys are strings (JSON round-trip forces string keys)
         accumulated_text += vocab['id_to_token'][str(next_token_id)]
         generated_token_ids.append(next_token_id)
@@ -104,6 +136,8 @@ def generate_constrained(
         ):
             break
 
+        # Reactive safety net in case the proactive steering above still
+        # ended up in a loop (e.g. every alternative was exhausted).
         if _has_repetition_loop(generated_token_ids):
             break
 

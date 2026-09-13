@@ -56,13 +56,12 @@ def _build_instruction_prefix(
         "and provide its parameters.",
         "",
         "CRITICAL RULES FOR PARAMETER VALUES:",
-        "- For number parameters: Extract the EXACT numbers from the user's request.",
-        "  Example: 'sum of 265 and 345' means a=265.0, b=345.0",
-        "  Do NOT use example values like 2.0 or 3.0.",
-        "- For string parameters: Extract the EXACT text within quotes.",
-        "  Example: 'Reverse the string hello' means s=hello",
-        "  Do NOT add prefixes like 'description:' or 'user_'.",
-        "  Do NOT include the quotes themselves in the value.",
+        "- For number/integer parameters: extract the EXACT numbers the",
+        "  user actually wrote in their request, never a placeholder or",
+        "  example value.",
+        "- For string parameters: extract the EXACT text the user is",
+        "  referring to. Do NOT add prefixes like 'description:' or",
+        "  'user_', and do NOT include surrounding quotes in the value.",
         "",
         "Available functions:",
     ]
@@ -76,13 +75,6 @@ def _build_instruction_prefix(
             f"- {func.name}({param_list}): {func.description}"
         )
         lines.append(func_call)
-    lines.append("")
-    lines.append("Examples of correct value extraction:")
-    lines.append('User: "What is the sum of 2 and 3?" → {"name": "fn_add_numbers", "parameters": {"a": 2.0, "b": 3.0}}')
-    lines.append('User: "What is the sum of 265 and 345?" → {"name": "fn_add_numbers", "parameters": {"a": 265.0, "b": 345.0}}')
-    lines.append('User: "Reverse the string hello" → {"name": "fn_reverse_string", "parameters": {"s": "hello"}}')
-    lines.append('User: "Greet shrek" → {"name": "fn_greet", "parameters": {"name": "shrek"}}')
-    lines.append('User: "Calculate the square root of 144" → {"name": "fn_get_square_root", "parameters": {"a": 144.0}}')
     lines.append("")
     lines.append(f'User: "{prompt}"')
     lines.append("")
