@@ -22,7 +22,7 @@ but it is structurally incapable of saying it wrong syntax-wise.
 
 This technique is usually called **constrained decoding** (or grammar-constrained
 generation). Full technical breakdown with diagrams lives in
-[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) if you want
+[TECHNICAL_DOCUMENTATION.md](/TECHNICAL_DOCUMENTATION.md) if you want
 the deep dive — this README covers the essentials.
 
 ## Instructions
@@ -78,7 +78,7 @@ generates:
 
 Because invalid tokens are removed *before* the model picks, there is no
 path for the model to ever emit broken syntax. It's not that the model is
-well-behaved — it's that it's not given the option to misbehave.
+well-behaved it's just that it's not given the option to misbehave.
 
 Three grammars exist, one for each kind of value we ever need to generate:
 
@@ -124,7 +124,7 @@ which slot it's filling.
 
 **Instruction prefix listing the available functions.** Originally the model
 was just shown the bare prompt with zero information about what functions
-existed. Unsurprisingly, it picked almost randomly. We now build an explicit
+existed. Unsurprisingly, it picked almost randomly. Hence we built an explicit
 instruction block before generation starts, listing every function's name,
 parameter names/types, and description, followed by the user's actual
 request and the opening of the target JSON (`{"name": "`). This alone was
@@ -140,27 +140,26 @@ in things that actually vary: the function name and the parameter values.
 vocabulary from BPE encoding and building a `first_char_index` lookup is a
 one-time cost, so it's cached to disk after the first run. Similarly,
 `StringGrammar`'s "inside a string" state legally allows almost the entire
-vocabulary — checking every token character-by-character on every single
+vocabulary checking every token character-by-character on every single
 generation step was way too slow, so the set of "safe" tokens for that state
 is computed once up front and reused.
 
 ## Performance Analysis
 
 **Reliability (syntax):** 100%. Every single output produced by this
-pipeline is valid JSON matching the expected schema — a valid function name
+pipeline is valid JSON matching the expected schema. A valid function name
 from the provided list, and parameter values that are properly formed JSON
-numbers/strings. This is mechanically guaranteed by the grammars, not a
-"usually works" kind of guarantee.
+numbers/strings. This is mechanically guaranteed by the grammars.
 
 **Accuracy (semantics):** this is where the small model shows its limits.
 Function selection got dramatically better after adding the instruction
 prefix (from essentially random to correctly picking `fn_add_numbers` for
 "sum of X and Y", `fn_greet` for greetings, etc.). Parameter *values* are
-less reliable — the model sometimes copies numbers from the prompt
-correctly, and sometimes falls back on a memorized "example" pair instead of
-actually reading the numbers out of the request. This is a known
+less reliable. The model sometimes copies numbers from the prompt
+correctly, and sometimes falls back on a memorized pair instead of
+actually reading the numbers out of the requested prompt. This is a known
 consequence of greedy argmax decoding with no few-shot examples on a 0.6B
-model, not a bug in the constraint system — the constraints guarantee valid
+model, not a bug in the constraint system. The constraints guarantee valid
 *shape*, never correct *content*.
 
 **Speed:** the biggest cost by far is that the model has no KV-cache, so
@@ -212,13 +211,9 @@ canonical "2 + 3" example from its training data instead of reading the
 actual numbers out of the prompt, especially with pure greedy decoding and
 no examples to anchor it. This is being tackled with clearer prompting
 (one-shot examples inside the instruction prefix) since it's a model-bias
-problem rather than a decoding bug — the grammar was never the thing
+problem rather than a decoding bug. The grammar was never the thing
 choosing the wrong numbers, it was just faithfully encoding whatever the
 model wanted to say.
-
-**NumPy 2.0 API removals.** `np.NINF`, which the masking function originally
-used to blank out invalid logits, was removed in NumPy 2.0 (this project
-pins `numpy>=2.5.1`). Swapped it for `-np.inf`.
 
 ## Testing Strategy
 
@@ -299,19 +294,25 @@ Produces a `function_calling_results.json` like:
   single characters.
 - [Pydantic documentation](https://docs.pydantic.dev/) — used for all input/output
   schema validation in this project.
+- [Parsing Incrementally for Constrained Auto-Regressive Decoding
+  from Language Models](https://aclanthology.org/2021.emnlp-main.779.pdf) - Torsten Scholak and Nathan Schucher and Dzmitry Bahdanau
+- [Guiding LLMs The Right Way: Fast, Non-Invasive Constrained Generation - Luca Beurer-Kellner, Marc Fischer, Martin      Vechev](https://files.sri.inf.ethz.ch/website/papers/beurerkellner2024domino.pdf)
+- [Tokenizers](https://huggingface.co/docs/tokenizers/index)
+- [ArgParse Documentation](https://docs.python.org/3/library/argparse.html)
 
-**How AI was used:** This project was built with GitHub Copilot (Claude)
+
+**How AI was used:** This project was built with GitHub Copilot (Claude Sonnet)
 acting as a mentor/pair-programmer rather than an autocomplete tool. For
 most of the implementation (the grammar classes, the decoding loop, the
 orchestrator), I wrote the code myself after Copilot explained the design
 and pointed out what a step needed to accomplish, then reviewed what I wrote
-line by line — catching real bugs like the first-character-only trie
+line by line, catching real bugs like the first-character-only trie
 matching, the `.append()` vs `.extend()` mistake, and the trie resetting to
 root on every loop iteration. Copilot was also used to directly implement
 a handful of things: the debugging/performance-fix pass on the grammars and
 decoder near the end of the project (whole-token validation, precomputing
-safe string tokens, threading context between generation steps), and this
-README plus the technical documentation in `docs/`. No project logic was
-generated wholesale without me understanding what it does — the constrained
-decoding architecture, the choice of grammars, and the overall design were
-worked out through back-and-forth discussion, not generated blind.
+safe string tokens, threading context between generation steps). This README.md
+plus the Technical Documentation was made in collaboration with Claude Haiku.
+No project logic was generated wholesale without me understanding what it does
+such as the constrained decoding architecture, the choice of grammars, and the
+overall design were worked out through back-and-forth discussion, not generated blind.

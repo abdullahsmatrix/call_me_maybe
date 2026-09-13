@@ -326,4 +326,4 @@ characters are legal at a given point) is decided deterministically, and
 everything left to the model (which function, which values) is done inside
 a fence narrow enough that it cannot escape into invalid syntax. This is
 what allows a 0.6B parameter model — far too small to reliably "just get
-JSON right" on its own — to still produce 100% structurally valid output.
+JSON right" on its own to still produce 100% structurally valid output.
