@@ -23,6 +23,35 @@ def mask_logits(logits: np.ndarray, valid_token_ids: list[int]) -> np.ndarray:
     return masked
 
 
+def _has_repetition_loop(
+    token_ids: list[int], max_period: int = 8, min_repeats: int = 3
+) -> bool:
+    """Detect a short cycle of tokens repeating back-to-back at the tail.
+
+    Greedy decoding on a very small model can get stuck re-emitting the
+    same short phrase forever (e.g. inside a string value that never
+    reaches a closing quote). Once that cycle is clearly locked in there
+    is nothing to gain from burning the rest of the iteration budget on
+    it - each further token is a full, increasingly expensive forward
+    pass with no chance of converging. Period 1 (a single token repeated,
+    e.g. the same digit) is intentionally excluded so this never cuts off
+    a legitimately repeated digit inside a number.
+    """
+    n = len(token_ids)
+    for period in range(2, max_period + 1):
+        window = period * min_repeats
+        if n < window:
+            continue
+        tail = token_ids[-window:]
+        block = tail[-period:]
+        if all(
+            tail[i * period:(i + 1) * period] == block
+            for i in range(min_repeats)
+        ):
+            return True
+    return False
+
+
 def generate_constrained(
     model: Any,
     input_ids: list[int],
@@ -73,6 +102,9 @@ def generate_constrained(
             grammar.is_complete(accumulated_text)
             and not grammar.get_valid_token_ids(accumulated_text)
         ):
+            break
+
+        if _has_repetition_loop(generated_token_ids):
             break
 
     return (accumulated_text, generated_token_ids)
