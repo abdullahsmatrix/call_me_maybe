@@ -193,7 +193,6 @@ def _generate_parameters(
     # per-string-slot candidate scores, kept so the slot -> candidate
     # assignment can be settled globally once every slot has bid
     score_table: dict[str, dict[str, float]] = {}
-    tokens_table: dict[str, dict[str, list[int]]] = {}
 
     for i, (param_name, param_type) in enumerate(
         function_def.parameters.items()
@@ -247,7 +246,6 @@ def _generate_parameters(
             chosen = _best_unused(scores, used_candidates)
             if chosen is not None:
                 score_table[param_name] = scores
-                tokens_table[param_name] = token_ids_by_candidate
                 value_text = chosen
                 value_ids = token_ids_by_candidate[chosen]
                 context_ids = context_ids + quote_ids + value_ids + quote_ids

@@ -87,7 +87,7 @@ flowchart TD
 
 ## 5. The Grammar Layer in Detail
 
-Three grammars exist, one per kind of value the model is ever asked to produce.
+Four grammars exist, one per kind of value the model is ever asked to produce.
 Each one exposes the same two-method contract, so the decoding engine can work
 with any of them interchangeably:
 
@@ -138,7 +138,19 @@ is non-empty and doesn't end on a state that's still expecting more
 characters (a trailing sign, a trailing decimal point, a trailing exponent
 marker).
 
-### 5.3 StringGrammar — string parameters
+### 5.3 IntegerGrammar — integer parameters
+
+The same machine with the decimal point and exponent branches removed: an
+optional leading `-`, then digits only. Used when a parameter declares type
+`integer`, so the emitted value round-trips through `int()` rather than
+`float()`.
+
+### 5.4 StringGrammar — string parameters (fallback)
+
+> Since the parameter-accuracy work, string parameters are normally filled
+> by **candidate selection** (§7.3), not by this grammar. `StringGrammar`
+> remains as the fallback for the degenerate case where no candidate spans
+> can be extracted from the prompt at all.
 
 Also a state machine, mirroring JSON's quoted-string grammar: it tracks
 whether it's before the opening quote, inside the string body, in the middle
@@ -160,12 +172,27 @@ described in section 2. It is grammar-agnostic — it does not know or care
 whether it's generating a function name, a number, or a string; it simply
 asks whichever grammar it was given what's currently legal.
 
-Two safety mechanisms bound its runtime:
+The loop has four exits, and getting them right was subtle:
 
-- If the grammar ever reports that *nothing* is currently legal (a dead end),
+- **Dead end.** If the grammar reports that *nothing* is currently legal,
   generation stops immediately rather than continuing to burn model calls.
-- A maximum iteration count caps how many tokens can be generated for any
-  single value, in case the model never happens to pick a "completing" token.
+- **Complete and unextendable.** If the value is finished *and* the grammar
+  offers no legal continuation (a string's closing quote was just emitted),
+  stop right away. This check costs no model call.
+- **Complete, extendable, but the model wants out.** Some states are both a
+  legal stopping point and a legal continuation: `1` is already a complete
+  JSON number, and unlike a string, a number has no terminator character
+  saying more digits follow. Stopping on `is_complete()` alone truncated
+  `12345` to `1`. So when the value could end here, the loop inspects the
+  model's **unmasked** top choice: if that is still a legal continuation the
+  model wants more digits, so keep going; if it has moved on to a comma or
+  brace, the value is done. The logits were already fetched, so this is free.
+- **Budget exhausted.** A maximum iteration count, plus a repetition guard
+  that detects a short token cycle repeating back-to-back and bails out.
+  Greedy decoding on a small model can lock into re-emitting the same phrase
+  forever; without the guard one prompt burned 318 seconds producing nothing
+  useful. Single-token repeats are deliberately *not* treated as a loop, so a
+  legitimately repeated digit inside a number is never cut off.
 
 Because the underlying model has no key-value cache, every single generated
 token requires a full forward pass over the entire sequence generated so far.
@@ -192,17 +219,24 @@ sequenceDiagram
     M-->>D: constrained tokens
     D-->>O: function name
 
-    O->>O: append `", "parameters": {` to context
+    O->>O: append `", "arguments": {` to context
     loop for each parameter
         O->>O: append `"param_name": ` label to context
-        O->>D: generate value (NumberGrammar or StringGrammar)
-        D->>M: token-by-token forward passes
-        M-->>D: constrained tokens
-        D-->>O: parameter value
-        O->>O: append generated tokens to context
+        alt numeric / boolean
+            O->>D: generate value (Number/Integer/TrieMatcher)
+            D->>M: token-by-token forward passes
+            M-->>D: constrained tokens
+            D-->>O: parameter value
+        else string
+            O->>O: extract candidate spans from the prompt
+            O->>M: score each candidate (mean log-prob, terminated)
+            M-->>O: per-candidate scores
+            O->>O: take best unused candidate
+        end
+        O->>O: append chosen value's tokens to context
     end
 
-    O->>O: assemble FunctionCallResults
+    O->>O: settle string slots globally, then assemble<br/>FunctionCallResults
 ```
 
 ### 7.1 Why an instruction prefix is needed
@@ -213,8 +247,20 @@ what functions existed or what they did, so function selection was close to
 random. The fix was to build an explicit instruction block before generation
 begins, listing every available function's name, parameter names/types, and
 description, followed by the user's actual request and the opening of the
-target JSON object (`{"name": "`). This gives the tiny model something
+answer (`{"function": "`). This gives the tiny model something
 concrete to reason from instead of guessing blind.
+
+The scaffold deliberately says `"function"` and `"arguments"` rather than
+`"name"` and `"parameters"`. A prompt containing a template placeholder such
+as `{name}` collides with a `{"name": "` scaffold: the model reads the two as
+the same thing and starts predicting a *person's* name instead of a function
+name. These keys only exist in the text shown to the model — the emitted JSON
+keys come from `FunctionCallResults`, so the output format is unaffected.
+
+The prompt is also quote-escaped before being embedded in the `User: "…"`
+framing, so a request that itself contains `"` cannot produce a broken,
+self-nested quote structure at the exact point the model must tell where the
+request ends and its answer begins.
 
 ### 7.2 Why context is threaded between stages
 
@@ -225,6 +271,39 @@ which function it had already committed to, or which parameter slot it was
 currently filling in. Threading the growing token sequence through every
 stage keeps the model's context consistent with the JSON actually being
 constructed.
+
+### 7.3 How string parameters are filled
+
+Every correct string value in this task is a literal substring of the
+request — `SELECT * FROM users`, `production`, `latin-1`. So the model is
+never asked *"which characters?"*, only *"which span?"*:
+
+1. **Extract candidates** (`_extract_prompt_candidates`): every bare word and
+   quoted phrase in the prompt, plus everything after the prompt's last colon
+   (which captures `Format template: <the whole rest>` requests, where the
+   entire remainder is one value).
+2. **Score each candidate** (`_score_string_candidates`) by **mean
+   log-probability per token, including its closing quote.** Both details
+   matter. Mean rather than total, because total sums a negative per token
+   and so mechanically favours short candidates. Including the terminator,
+   because otherwise a prefix like `Hello` is scored as if it never had to
+   close the string — and it wins over `Hello {user}'s profile!` despite the
+   model plainly wanting to continue.
+3. **Assign slots globally** (`_assign_candidates_globally`). Filling slots
+   left to right lets an early slot take a span a later slot needs far more:
+   `utf-8` narrowly outbids the path for `path`, while `encoding` wants
+   `utf-8` with near certainty — yielding the two values swapped. Instead,
+   the most confident `(slot, candidate)` pairs are assigned first.
+
+This is only revisable after the fact because string values are **selected,
+not generated**: there is no token stream to unwind. It also makes
+hallucination and repetition loops impossible by construction, and removes
+the need for the model to produce JSON escape sequences — a copied span is
+escaped correctly by `json.dump` on the way out, which is why Windows paths
+like `C:\Users\john\config.ini` now survive intact.
+
+A parameter's own name is excluded from its candidate list, because models
+readily echo the key as its own value (`"template": "template"`).
 
 ## 8. Data / Class Relationships
 
@@ -237,7 +316,7 @@ classDiagram
         +returns: ParameterType
     }
     class ParameterType {
-        +type: "number" | "string"
+        +type: number | string | integer | boolean
     }
     class PromptEntry {
         +prompt: str
@@ -245,7 +324,7 @@ classDiagram
     class FunctionCallResults {
         +prompt: str
         +name: str
-        +parameters: dict~str, float | str~
+        +parameters: dict~str, float | str | int | bool~
     }
 
     class TrieMatcher {
@@ -253,6 +332,10 @@ classDiagram
         +is_complete(prefix) bool
     }
     class NumberGrammar {
+        +get_valid_token_ids(text) list~int~
+        +is_complete(text) bool
+    }
+    class IntegerGrammar {
         +get_valid_token_ids(text) list~int~
         +is_complete(text) bool
     }
@@ -268,7 +351,8 @@ classDiagram
     FunctionDef "1" --> "many" ParameterType
     Orchestrator ..> TrieMatcher : uses
     Orchestrator ..> NumberGrammar : uses
-    Orchestrator ..> StringGrammar : uses
+    Orchestrator ..> IntegerGrammar : uses
+    Orchestrator ..> StringGrammar : fallback only
     Orchestrator ..> FunctionDef : reads
     Orchestrator ..> FunctionCallResults : produces
 ```
@@ -294,15 +378,25 @@ flowchart LR
 - The function name is always one of the functions actually provided.
 - Numbers and strings always conform to JSON's literal grammar (no stray
   characters, unterminated quotes, or malformed numbers).
+- String values are always literal spans of the request — the model cannot
+  invent characters that were never in the prompt.
 
-**Not guaranteed (inherent to using a very small model):**
-- That the *correct* function is chosen for a given prompt.
-- That the parameter *values* semantically match what the user asked for.
+**Measured, but not guaranteed:**
+Against the ground truth in `data/input/function_calling_corrections.json`
+the pipeline currently scores **11/11 function names and 11/11 parameter
+sets**, and 3/3 on an unseen function set with different parameter shapes
+and type spellings. That is a measurement, not a mechanical guarantee:
+- Nothing forces the *correct* function to be chosen for a given prompt.
+- Nothing forces the *correct* span to be chosen for a given slot.
+- §7.3 assumes the value is a literal substring of the prompt. A request
+  needing a *transformed* value (uppercased, computed, or merely implied)
+  would fall outside that assumption.
 
 The project's stated requirement was specifically about syntactic
 reliability — not spontaneous correctness — so this split is intentional:
-grammar owns syntax, the model (aided by the instruction prefix) owns
-semantics, and only the former is mechanically enforced.
+the constraint layer owns syntax mechanically, while semantics is steered
+(instruction prefix, candidate scoring, global slot assignment) and then
+verified by measurement rather than assumed.
 
 ## 11. Performance Considerations
 
@@ -314,9 +408,16 @@ semantics, and only the former is mechanically enforced.
   large fraction of the vocabulary (e.g. "inside a string"), the set of
   always-valid tokens is computed once per grammar instance rather than
   re-derived character-by-character on every generation step.
-- **Iteration caps and dead-end detection**: generation for any single value
-  is bounded, and stops immediately if the grammar ever has no valid next
-  token, instead of exhausting the iteration budget uselessly.
+- **Iteration caps, dead-end detection and a repetition guard**: generation
+  for any single value is bounded, stops immediately if the grammar ever has
+  no valid next token, and bails out if the model locks into repeating a
+  short token cycle instead of exhausting the budget uselessly.
+- **Candidate scoring is the new dominant cost**: scoring string candidates
+  costs roughly `sum(len(candidate_tokens) + 1)` forward passes per slot,
+  rather than the single walk a greedy decode would take. A full 11-prompt
+  run takes ~3 minutes — inside the 5-minute budget, but this is the main
+  thing to optimise first if that budget ever gets tight (e.g. by pruning
+  obviously implausible candidates before scoring them).
 
 ## 12. Summary
 
